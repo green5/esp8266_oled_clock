@@ -1,10 +1,17 @@
 /*
+  board:
+  generic esp8266 module
   libs:
   adafruit/Adafruit_SSD1306
   adafruit/RTClib
   aharshac/EasyNTPClient
   todo:
-  clock font+
+  припаять что нибудь
+  gpio:
+  4,5 - screen
+  12,14 - PCF8563 
+  1,3 rx/tx?
+  
 */
 #include <ESP8266WiFi.h>
 #include <ESP8266mDNS.h>
@@ -25,7 +32,7 @@ extern "C"
 
 IPAddress syslog;
 Adafruit_SSD1306 display(128,64,&Wire,-1);
-RTC_PCF8563 rtc;
+RTC_PCF8563 rtc; // https://www.nxp.com/docs/en/data-sheet/PCF8563.pdf
 
 #define NROW 8
 #define NCOL 21
@@ -61,18 +68,30 @@ void screen_flush() {
   display.display();   
 }
 
-void screen_clock(const char *d,const char *t) {
+void screen_clock(unsigned n, const DateTime &now) {
   int x = 15;
   int y = 10;
   x += (rand()-RAND_MAX/2) % 10;
   y += (rand()-RAND_MAX/2) % 10;
   Wire.begin(5,4);
   display.clearDisplay();
-  display.setTextSize(2);
-  display.setCursor(x, y);
-  display.print(d);
-  display.setCursor(x, y+25);
-  display.print(t);
+  if(1==0) {
+    char d[20],t[20];
+    snprintf(d,sizeof(d),"%02d.%02d.%02d",now.day(),now.month(),now.year()-2000);
+    snprintf(t,sizeof(t),"%02d:%02d:%02d",now.hour(),now.minute(),now.second());
+    display.setTextSize(2);
+    display.setCursor(x, y);
+    display.print(d);
+    display.setCursor(x, y+25);
+    display.print(t);
+  } else {
+    int t[2] = {now.hour(),now.minute()};
+    display.setTextSize(8);
+    display.setCursor(20, 10);
+    char d[20];
+    snprintf(d,sizeof(d),"%02d",t[n%2]);
+    display.print(d);
+  }
   display.display();   
 }
 
@@ -113,15 +132,12 @@ void rtc_init() {
 
 uint32_t now_;
 
-void rtc_update() {
+void rtc_update(unsigned n) {
   Wire.begin(12,14);
   DateTime now = rtc.now();
   if(now_!=now.unixtime()) {
     now_ = now.unixtime();
-    char d[20],t[20];
-    snprintf(d,sizeof(d),"%d.%d.%d",now.day(),now.month(),now.year()-2000);
-    snprintf(t,sizeof(t),"%02d:%02d:%02d",now.hour(),now.minute(),now.second());
-    screen_clock(d,t);
+    screen_clock(n, now);
   }
 }
 
@@ -195,10 +211,13 @@ void setup() {
   rtc_init();
 }
 
+static unsigned nloop = 0;
+
 void loop() {
+  ++nloop;
   ArduinoOTA.handle();
   if(ntpinit) ntpinit=false,ntp_init();
-  rtc_update();
+  rtc_update(nloop);
   //screen_flush();
 }
 
